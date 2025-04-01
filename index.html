@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Configurable Draggable Three.js PSO Murmuration</title>
+    <style>
+        /* --- CSS remains the same as the previous version --- */
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scrollbars on the body */
+            background-color: #111;
+            color: #eee;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            display: flex; /* Use flexbox for layout */
+            flex-direction: column; /* Stack canvas and controls vertically */
+            height: 100vh; /* Full viewport height */
+        }
+
+        canvas {
+            display: block;
+            flex-grow: 1; /* Canvas takes available space */
+            min-height: 0; /* Allow canvas to shrink */
+            touch-action: none; /* Prevent default touch actions like scrolling/zooming on the canvas */
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            z-index: 100;
+            pointer-events: none; /* Allow clicking through */
+            font-size: 12px;
+        }
+
+        #controls {
+            position: absolute;
+            top: 50px;
+            right: 10px;
+            width: 280px; /* Fixed width for controls */
+            max-height: calc(100vh - 60px); /* Limit height */
+            background-color: rgba(40, 40, 40, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            overflow-y: auto; /* Allow scrolling if content overflows */
+            z-index: 99; /* Below info if overlapping */
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            color: #eee;
+            /* Prevent clicks on controls from triggering drag */
+            /* pointer-events: auto; is default, but be explicit */
+        }
+
+        #controls h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #0af;
+            font-size: 16px;
+            border-bottom: 1px solid #555;
+            padding-bottom: 5px;
+        }
+
+         #controls div {
+            margin-bottom: 12px;
+         }
+
+        #controls label {
+            display: inline-block;
+            width: 150px; /* Adjust as needed */
+            font-size: 13px;
+            vertical-align: middle;
+        }
+
+        #controls input[type="range"] {
+            width: 80px; /* Adjust as needed */
+            vertical-align: middle;
+            cursor: pointer;
+        }
+         #controls input[type="number"] {
+             width: 50px;
+             vertical-align: middle;
+             background-color: #333;
+             color: #eee;
+             border: 1px solid #555;
+             padding: 2px 4px;
+             font-size: 12px;
+             margin-left: 5px;
+             border-radius: 3px;
+             /* Remove number spinners for cleaner look */
+             -moz-appearance: textfield;
+             appearance: textfield;
+         }
+        #controls input[type="number"]::-webkit-outer-spin-button,
+        #controls input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        #controls .value-display {
+            display: inline-block;
+            min-width: 35px;
+            text-align: right;
+            font-weight: bold;
+            margin-left: 8px;
+            font-size: 13px;
+            vertical-align: middle;
+            color: #fff;
+        }
+
+        #controls button {
+            display: block;
+            width: 100%;
+            padding: 8px 12px;
+            background-color: #08a;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.2s ease;
+        }
+        #controls button:hover {
+            background-color: #0af;
+        }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 600px) {
+            #controls {
+                width: calc(100% - 20px); /* Almost full width */
+                max-width: 300px; /* Limit max width on mobile too */
+                top: auto; /* Unset top */
+                bottom: 10px; /* Position at bottom */
+                left: 10px; /* Align left */
+                right: auto; /* Unset right */
+                max-height: 45vh; /* Limit height more strictly */
+            }
+             #controls label { width: 120px; }
+             #controls input[type="range"] { width: calc(100% - 185px); min-width: 60px; } /* Dynamic width */
+             #controls input[type="number"] { width: 45px; }
+             #controls .value-display { min-width: 30px; }
+
+            #info {
+                font-size: 10px;
+                max-width: calc(100% - 40px); /* Prevent overlap with potential controls */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="info">Particle Swarm - Murmuration Simulation<br>Click & drag red spheres to move targets.</div>
+
+    <!-- Controls Panel -->
+    <div id="controls">
+        <!-- Controls content remains the same -->
+         <h3>Simulation Parameters</h3>
+        <div>
+            <label for="numParticles">Particles:</label>
+            <input type="number" id="numParticles" min="10" max="5000" step="10">
+            <span class="value-display" id="numParticlesValue"></span>
+        </div>
+         <div>
+            <label for="numOptima">Targets:</label>
+            <input type="number" id="numOptima" min="1" max="20" step="1">
+            <span class="value-display" id="numOptimaValue"></span>
+        </div>
+         <div>
+            <label for="bounds">Bounds Size:</label>
+            <input type="range" id="bounds" min="50" max="1000" step="10">
+            <span class="value-display" id="boundsValue"></span>
+        </div>
+
+        <h3>Particle Behavior</h3>
+         <div>
+            <label for="maxSpeed">Max Speed:</label>
+            <input type="range" id="maxSpeed" min="0.1" max="5.0" step="0.1">
+            <span class="value-display" id="maxSpeedValue"></span>
+        </div>
+         <div>
+            <label for="maxForce">Max Force:</label>
+            <input type="range" id="maxForce" min="0.01" max="0.5" step="0.01">
+            <span class="value-display" id="maxForceValue"></span>
+        </div>
+         <div>
+            <label for="neighborRadius">Neighbor Radius:</label>
+            <input type="range" id="neighborRadius" min="5" max="100" step="1">
+            <span class="value-display" id="neighborRadiusValue"></span>
+        </div>
+         <div>
+            <label for="separationDistance">Separation Dist:</label>
+            <input type="range" id="separationDistance" min="1" max="50" step="1">
+            <span class="value-display" id="separationDistanceValue"></span>
+        </div>
+
+        <h3>Behavior Weights</h3>
+        <div>
+            <label for="cohesionWeight">Cohesion:</label>
+            <input type="range" id="cohesionWeight" min="0" max="5" step="0.1">
+            <span class="value-display" id="cohesionWeightValue"></span>
+        </div>
+        <div>
+            <label for="alignmentWeight">Alignment:</label>
+            <input type="range" id="alignmentWeight" min="0" max="5" step="0.1">
+            <span class="value-display" id="alignmentWeightValue"></span>
+        </div>
+        <div>
+            <label for="separationWeight">Separation:</label>
+            <input type="range" id="separationWeight" min="0" max="5" step="0.1">
+            <span class="value-display" id="separationWeightValue"></span>
+        </div>
+        <div>
+            <label for="goalWeight">Goal Seeking:</label>
+            <input type="range" id="goalWeight" min="0" max="5" step="0.1">
+            <span class="value-display" id="goalWeightValue"></span>
+        </div>
+        <div>
+            <label for="boundsWeight">Bounds Avoid:</label>
+            <input type="range" id="boundsWeight" min="0" max="5" step="0.1">
+            <span class="value-display" id="boundsWeightValue"></span>
+        </div>
+
+        <h3>Target (Optima) Behavior</h3>
+        <div>
+            <label for="optimaMoveRadius">Move Radius:</label>
+            <input type="range" id="optimaMoveRadius" min="10" max="500" step="5">
+            <span class="value-display" id="optimaMoveRadiusValue"></span>
+        </div>
+        <div>
+            <label for="optimaMoveSpeed">Move Speed:</label>
+            <input type="range" id="optimaMoveSpeed" min="0.0001" max="0.005" step="0.0001">
+            <span class="value-display" id="optimaMoveSpeedValue"></span>
+        </div>
+
+        <button id="resetButton">Apply & Reset Simulation</button>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Configuration Object (remains the same) ---
+        const config = {
+            numParticles: 1500, numOptima: 4, bounds: 250,
+            maxSpeed: 1.6, maxForce: 0.06, neighborRadius: 30, separationDistance: 15,
+            cohesionWeight: 1.0, alignmentWeight: 1.2, separationWeight: 1.5, goalWeight: 0.9, boundsWeight: 2.0,
+            optimaMoveRadius: 100, optimaMoveSpeed: 0.0006,
+            particleSize: 1.8, particleOpacity: 0.75, particleColor: new THREE.Color(0.6, 0.7, 1.0),
+            optimaColor: 0xff3333, optimaSize: 5,
+            fogNearFactor: 0.5, fogFarFactor: 1.8, showBoundsBox: false
+        };
+        config.optimaMoveRadius = config.bounds * 0.4; // Initial calculation
+
+        // --- Global Variables ---
+        let scene, camera, renderer, controls;
+        let particles = [];
+        let particleGeometry, particleMaterial, particleSystem;
+        let optima = []; // Now stores { position: Vector3, marker: Mesh, isDragged: boolean }
+        let boundingBoxHelper;
+        const clock = new THREE.Clock();
+        let animationFrameId;
+
+        // --- Dragging State ---
+        const raycaster = new THREE.Raycaster();
+        const pointerNDC = new THREE.Vector2(); // Normalized Device Coordinates (-1 to +1)
+        const dragPlane = new THREE.Plane();
+        const intersectionPoint = new THREE.Vector3(); // Point where ray intersects drag plane
+        const worldPositionOffset = new THREE.Vector3(); // Offset from marker center to intersection point
+        let draggedOptimum = null; // Holds the optimum object { position, marker, isDragged } being dragged
+        let isDragging = false;
+
+        // --- Helper Functions (random remains the same) ---
+        function random(min, max) { return Math.random() * (max - min) + min; }
+
+        // --- Particle Class (remains the same) ---
+        class Particle {
+            constructor() {
+                const startRadius = config.bounds / 4;
+                const x = random(-startRadius, startRadius);
+                const y = random(-startRadius, startRadius);
+                const z = random(-startRadius, startRadius);
+                this.position = new THREE.Vector3(x, y, z);
+                this.velocity = new THREE.Vector3(random(-1, 1), random(-1, 1), random(-1, 1)).normalize().multiplyScalar(random(config.maxSpeed * 0.5, config.maxSpeed));
+                this.acceleration = new THREE.Vector3();
+            }
+            applyBehaviors(allParticles, currentOptima) {
+                let separationForce = new THREE.Vector3();
+                let alignmentForce = new THREE.Vector3();
+                let cohesionForce = new THREE.Vector3();
+                let boundsForce = new THREE.Vector3();
+                let neighborCount = 0;
+                let separationCount = 0;
+                const neighborRadiusSq = config.neighborRadius * config.neighborRadius;
+                const separationDistanceSq = config.separationDistance * config.separationDistance;
+                for (let other of allParticles) {
+                    if (other === this) continue;
+                    let dSq = this.position.distanceToSquared(other.position);
+                    if (dSq > 0 && dSq < neighborRadiusSq) {
+                        alignmentForce.add(other.velocity);
+                        cohesionForce.add(other.position);
+                        neighborCount++;
+                    }
+                    if (dSq > 0 && dSq < separationDistanceSq) {
+                        let diff = new THREE.Vector3().subVectors(this.position, other.position);
+                        diff.normalize();
+                        diff.divideScalar(Math.sqrt(dSq) + 0.0001);
+                        separationForce.add(diff);
+                        separationCount++;
+                    }
+                }
+                if (neighborCount > 0) {
+                    alignmentForce.divideScalar(neighborCount).normalize().multiplyScalar(config.maxSpeed);
+                    let steerAlignment = this.calculateSteer(alignmentForce);
+                    this.applyForce(steerAlignment.multiplyScalar(config.alignmentWeight));
+                    cohesionForce.divideScalar(neighborCount);
+                    let steerCohesion = this.seek(cohesionForce);
+                    steerCohesion.multiplyScalar(config.cohesionWeight);
+                    this.applyForce(steerCohesion);
+                }
+                if (separationCount > 0) {
+                    separationForce.divideScalar(separationCount).normalize().multiplyScalar(config.maxSpeed);
+                    let steerSeparation = this.calculateSteer(separationForce);
+                    steerSeparation.multiplyScalar(config.separationWeight);
+                    this.applyForce(steerSeparation);
+                }
+                let closestOptimumPosition = null;
+                let minDistSq = Infinity;
+                for (const optimum of currentOptima) {
+                    const dSq = this.position.distanceToSquared(optimum.position);
+                    if (dSq < minDistSq) {
+                        minDistSq = dSq;
+                        closestOptimumPosition = optimum.position;
+                    }
+                }
+                if (closestOptimumPosition) {
+                    let steerGoal = this.seek(closestOptimumPosition);
+                    steerGoal.multiplyScalar(config.goalWeight);
+                    this.applyForce(steerGoal);
+                }
+                const boundaryMargin = 20;
+                const turnForce = config.maxForce * 1.8;
+                const halfBounds = config.bounds / 2;
+                if (this.position.x < -halfBounds + boundaryMargin) boundsForce.x = turnForce;
+                if (this.position.x > halfBounds - boundaryMargin) boundsForce.x = -turnForce;
+                if (this.position.y < -halfBounds + boundaryMargin) boundsForce.y = turnForce;
+                if (this.position.y > halfBounds - boundaryMargin) boundsForce.y = -turnForce;
+                if (this.position.z < -halfBounds + boundaryMargin) boundsForce.z = turnForce;
+                if (this.position.z > halfBounds - boundaryMargin) boundsForce.z = -turnForce;
+                if (boundsForce.lengthSq() > 0) {
+                    boundsForce.normalize().multiplyScalar(config.maxSpeed);
+                    let steerBounds = this.calculateSteer(boundsForce);
+                    steerBounds.multiplyScalar(config.boundsWeight);
+                    this.applyForce(steerBounds);
+                }
+            }
+            seek(target) {
+                let desired = new THREE.Vector3().subVectors(target, this.position);
+                desired.normalize().multiplyScalar(config.maxSpeed);
+                return this.calculateSteer(desired);
+            }
+            calculateSteer(desiredVelocity) {
+                let steer = new THREE.Vector3().subVectors(desiredVelocity, this.velocity);
+                steer.clampLength(0, config.maxForce);
+                return steer;
+            }
+            applyForce(force) { this.acceleration.add(force); }
+            update() {
+                this.velocity.add(this.acceleration);
+                this.velocity.clampLength(0, config.maxSpeed);
+                this.position.add(this.velocity);
+                this.acceleration.multiplyScalar(0);
+            }
+        }
+
+        // --- Setup Controls (remains the same) ---
+        function setupControls() {
+             const controlsMap = { /* ... same map as before ... */
+                numParticles: { element: 'numParticles', valueElement: 'numParticlesValue', type: 'number' },
+                numOptima: { element: 'numOptima', valueElement: 'numOptimaValue', type: 'number' },
+                bounds: { element: 'bounds', valueElement: 'boundsValue', type: 'range' },
+                maxSpeed: { element: 'maxSpeed', valueElement: 'maxSpeedValue', type: 'range', factor: 10 }, // Use factor for decimal steps
+                maxForce: { element: 'maxForce', valueElement: 'maxForceValue', type: 'range', factor: 100 },
+                neighborRadius: { element: 'neighborRadius', valueElement: 'neighborRadiusValue', type: 'range' },
+                separationDistance: { element: 'separationDistance', valueElement: 'separationDistanceValue', type: 'range' },
+                cohesionWeight: { element: 'cohesionWeight', valueElement: 'cohesionWeightValue', type: 'range', factor: 10 },
+                alignmentWeight: { element: 'alignmentWeight', valueElement: 'alignmentWeightValue', type: 'range', factor: 10 },
+                separationWeight: { element: 'separationWeight', valueElement: 'separationWeightValue', type: 'range', factor: 10 },
+                goalWeight: { element: 'goalWeight', valueElement: 'goalWeightValue', type: 'range', factor: 10 },
+                boundsWeight: { element: 'boundsWeight', valueElement: 'boundsWeightValue', type: 'range', factor: 10 },
+                optimaMoveRadius: { element: 'optimaMoveRadius', valueElement: 'optimaMoveRadiusValue', type: 'range' },
+                optimaMoveSpeed: { element: 'optimaMoveSpeed', valueElement: 'optimaMoveSpeedValue', type: 'range', factor: 10000 }
+            };
+            for (const key in controlsMap) {
+                const controlInfo = controlsMap[key];
+                const inputElement = document.getElementById(controlInfo.element);
+                const valueElement = document.getElementById(controlInfo.valueElement);
+                if (inputElement && valueElement) {
+                    let initialValue = config[key];
+                    if (controlInfo.factor && controlInfo.type === 'range') initialValue *= controlInfo.factor;
+                    inputElement.value = initialValue;
+                    valueElement.textContent = config[key].toFixed(controlInfo.factor ? Math.log10(controlInfo.factor) : 0);
+                    inputElement.addEventListener('input', (event) => {
+                        let newValue = controlInfo.type === 'number' ? parseInt(event.target.value) : parseFloat(event.target.value);
+                        if (controlInfo.factor && controlInfo.type === 'range') newValue /= controlInfo.factor;
+                        if (key === 'separationDistance' && newValue > config.neighborRadius) {
+                            newValue = config.neighborRadius; inputElement.value = newValue; }
+                        if (key === 'neighborRadius' && newValue < config.separationDistance) {
+                            config.separationDistance = newValue;
+                            const sepInput = document.getElementById(controlsMap.separationDistance.element);
+                            const sepValueDisp = document.getElementById(controlsMap.separationDistance.valueElement);
+                            sepInput.value = newValue; sepValueDisp.textContent = newValue.toFixed(0); }
+                        config[key] = newValue;
+                        valueElement.textContent = newValue.toFixed(controlInfo.factor ? Math.log10(controlInfo.factor) : 0);
+                        if (key === 'bounds') {
+                            const optimaRadiusInput = document.getElementById(controlsMap.optimaMoveRadius.element);
+                            const optimaRadiusValueDisp = document.getElementById(controlsMap.optimaMoveRadius.valueElement);
+                            const newOptimaRadius = Math.round(config.bounds * 0.4);
+                            optimaRadiusInput.max = Math.max(500, config.bounds);
+                            config.optimaMoveRadius = newOptimaRadius;
+                            optimaRadiusInput.value = newOptimaRadius;
+                            optimaRadiusValueDisp.textContent = newOptimaRadius;
+                            if(scene && scene.fog){ scene.fog.near = config.bounds * config.fogNearFactor; scene.fog.far = config.bounds * config.fogFarFactor; }
+                            if(controls){ controls.maxDistance = config.bounds * 2.5; }
+                            updateBoundingBoxHelper();
+                        }
+                    });
+                } else { console.warn(`Control element not found for: ${key}`); }
+            }
+            document.getElementById('resetButton').addEventListener('click', resetSimulation);
+        }
+
+        // --- Clean up Three.js objects (remains the same) ---
+         function cleanupSimulation() {
+             if (animationFrameId) cancelAnimationFrame(animationFrameId);
+             clock.stop();
+            if (particleSystem) {
+                scene.remove(particleSystem); particleGeometry.dispose(); particleMaterial.dispose();
+                particleSystem = particleGeometry = particleMaterial = null; }
+            particles = [];
+            optima.forEach(opt => { if (opt.marker) scene.remove(opt.marker); });
+             if(optima.length > 0 && optima[0].marker && optima[0].marker.geometry) optima[0].marker.geometry.dispose();
+             if(optima.length > 0 && optima[0].marker && optima[0].marker.material) optima[0].marker.material.dispose();
+            optima = [];
+            if (boundingBoxHelper) { scene.remove(boundingBoxHelper); if(boundingBoxHelper.geometry) boundingBoxHelper.geometry.dispose(); if(boundingBoxHelper.material) boundingBoxHelper.material.dispose(); boundingBoxHelper = null; }
+            // Ensure dragging state is reset
+            isDragging = false;
+            draggedOptimum = null;
+        }
+
+        // --- Reset Simulation (remains the same) ---
+        function resetSimulation() {
+            console.log("Resetting simulation with config:", config);
+            cleanupSimulation();
+            setupSceneElements();
+            clock.start();
+            animate();
+        }
+
+        // --- Setup Scene Elements (Modified Optima Structure) ---
+        function setupSceneElements() {
+            // Particles Setup (same as before)
+            const positions = new Float32Array(config.numParticles * 3);
+            particleGeometry = new THREE.BufferGeometry();
+            particles = [];
+            for (let i = 0; i < config.numParticles; i++) {
+                const particle = new Particle();
+                particles.push(particle);
+                particle.position.toArray(positions, i * 3); }
+            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particleMaterial = new THREE.PointsMaterial({
+                vertexColors: false, color: config.particleColor, size: config.particleSize, sizeAttenuation: true,
+                transparent: true, opacity: config.particleOpacity, blending: THREE.AdditiveBlending });
+            particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(particleSystem);
+
+            // Optima Setup (Added isDragged property)
+            const optimumGeo = new THREE.SphereGeometry(config.optimaSize, 20, 20);
+            const optimumMat = new THREE.MeshPhongMaterial({
+                 color: config.optimaColor, emissive: new THREE.Color(config.optimaColor).multiplyScalar(0.3), shininess: 50 });
+            optima = [];
+
+            for(let i = 0; i < config.numOptima; i++) {
+                const moveRadius = config.optimaMoveRadius;
+                const position = new THREE.Vector3( random(-moveRadius * 0.8, moveRadius * 0.8), random(-moveRadius * 0.8, moveRadius * 0.8), random(-moveRadius * 0.8, moveRadius * 0.8) );
+                const marker = new THREE.Mesh(optimumGeo, optimumMat);
+                marker.position.copy(position);
+                // *** Store the data object with the marker ***
+                const optimumData = {
+                    position: position, // Logical position for particle seeking
+                    marker: marker,     // Visual mesh
+                    isDragged: false    // Flag to indicate user interaction
+                };
+                optima.push(optimumData);
+                // *** Add userData link back from marker to data for easy lookup ***
+                marker.userData.optimumData = optimumData;
+                scene.add(marker);
+            }
+
+            // Fog, Camera, Controls update (same as before)
+             if(scene.fog) { scene.fog.near = config.bounds * config.fogNearFactor; scene.fog.far = config.bounds * config.fogFarFactor; }
+             else { scene.fog = new THREE.Fog(0x111111, config.bounds * config.fogNearFactor, config.bounds * config.fogFarFactor); }
+            camera.position.z = config.bounds * 1.0; camera.position.y = config.bounds * 0.2;
+            camera.far = config.bounds * 4; camera.updateProjectionMatrix();
+            controls.maxDistance = config.bounds * 2.5; controls.target.set(0, 0, 0); controls.update();
+            updateBoundingBoxHelper();
+        }
+
+        // --- Update Bounding Box Helper (remains the same) ---
+        function updateBoundingBoxHelper() {
+            if (boundingBoxHelper) { scene.remove(boundingBoxHelper); if(boundingBoxHelper.geometry) boundingBoxHelper.geometry.dispose(); if(boundingBoxHelper.material) boundingBoxHelper.material.dispose(); boundingBoxHelper = null; }
+            if (config.showBoundsBox) { const boxGeometry = new THREE.BoxGeometry(config.bounds, config.bounds, config.bounds); const edges = new THREE.EdgesGeometry(boxGeometry); boundingBoxHelper = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x444444 })); scene.add(boundingBoxHelper); boxGeometry.dispose(); edges.dispose(); }
+        }
+
+
+        // --- Pointer Event Handlers ---
+
+        function updatePointerNDC(event) {
+            // Calculate pointer position in normalized device coordinates (-1 to +1) for raycasting
+            const rect = renderer.domElement.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            pointerNDC.x = (x / rect.width) * 2 - 1;
+            pointerNDC.y = -(y / rect.height) * 2 + 1; // Y is inverted
+        }
+
+        function onPointerDown(event) {
+            // Check if the click is on the canvas, not on the controls
+             if (event.target !== renderer.domElement) {
+                 return; // Click was on UI, ignore for dragging
+             }
+
+            updatePointerNDC(event);
+            raycaster.setFromCamera(pointerNDC, camera);
+
+            // Get only the optima markers for intersection test
+            const optimaMarkers = optima.map(o => o.marker);
+            const intersects = raycaster.intersectObjects(optimaMarkers);
+
+            if (intersects.length > 0) {
+                const intersectedObject = intersects[0].object;
+
+                // Find the corresponding optimum data object using the userData link
+                if (intersectedObject.userData.optimumData) {
+                    isDragging = true;
+                    draggedOptimum = intersectedObject.userData.optimumData;
+                    draggedOptimum.isDragged = true; // Mark it as dragged
+
+                    // Disable OrbitControls to prevent conflicts
+                    controls.enabled = false;
+
+                    // Calculate the plane for dragging (parallel to camera view, through the object)
+                    camera.getWorldDirection(dragPlane.normal).negate(); // Normal facing the camera
+                    dragPlane.setFromNormalAndCoplanarPoint(dragPlane.normal, intersectedObject.position);
+
+                    // Calculate the offset from the object's center to the intersection point
+                    worldPositionOffset.copy(intersects[0].point).sub(intersectedObject.position);
+
+                    // Change cursor style
+                    renderer.domElement.style.cursor = 'grabbing';
+                }
+            }
+        }
+
+        function onPointerMove(event) {
+            if (!isDragging || !draggedOptimum) return;
+
+            event.preventDefault(); // Prevent scrolling on touch devices
+
+            updatePointerNDC(event);
+            raycaster.setFromCamera(pointerNDC, camera);
+
+            // Find intersection point with the drag plane
+            if (raycaster.ray.intersectPlane(dragPlane, intersectionPoint)) {
+                // Calculate the new position by applying the offset
+                const newPosition = intersectionPoint.sub(worldPositionOffset);
+
+                // --- CLAMPING --- Keep dragged object within bounds
+                const halfBounds = config.bounds * 0.49; // Slightly inside
+                 newPosition.x = THREE.MathUtils.clamp(newPosition.x, -halfBounds, halfBounds);
+                 newPosition.y = THREE.MathUtils.clamp(newPosition.y, -halfBounds, halfBounds);
+                 newPosition.z = THREE.MathUtils.clamp(newPosition.z, -halfBounds, halfBounds);
+
+                // Update both the logical position and the visual marker
+                draggedOptimum.position.copy(newPosition);
+                draggedOptimum.marker.position.copy(newPosition);
+            }
+        }
+
+        function onPointerUp(event) {
+            if (isDragging) {
+                isDragging = false;
+                 if(draggedOptimum) {
+                    draggedOptimum.isDragged = false; // Unmark
+                 }
+                draggedOptimum = null;
+
+                // Re-enable OrbitControls
+                controls.enabled = true;
+
+                // Reset cursor style
+                renderer.domElement.style.cursor = 'grab'; // Or 'auto' or default
+            }
+        }
+
+        // --- Initialization Function ---
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.z = config.bounds * 1.0; camera.position.y = config.bounds * 0.2; camera.lookAt(scene.position);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setClearColor(0x111111);
+            const controlsDiv = document.getElementById('controls');
+            document.body.insertBefore(renderer.domElement, controlsDiv);
+            renderer.domElement.style.cursor = 'grab'; // Initial cursor
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; controls.dampingFactor = 0.05; controls.screenSpacePanning = false;
+            controls.minDistance = 50; controls.maxDistance = config.bounds * 2.5; controls.target.set(0, 0, 0);
+
+            const ambientLight = new THREE.AmbientLight(0x505050); scene.add(ambientLight);
+            const hemiLight = new THREE.HemisphereLight(0x888899, 0x333344, 0.9); scene.add(hemiLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.7); directionalLight.position.set(50, 80, 30); scene.add(directionalLight);
+
+            setupSceneElements(); // Creates particles, optima (with userData link)
+            setupControls();
+
+            // --- Add Event Listeners for Dragging ---
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            renderer.domElement.addEventListener('pointermove', onPointerMove);
+            renderer.domElement.addEventListener('pointerup', onPointerUp);
+            renderer.domElement.addEventListener('pointerleave', onPointerUp); // Treat leaving canvas as pointer up
+
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        // --- Window Resize Handler (remains the same) ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Animation Loop (Modified Optima Update) ---
+        function animate() {
+            animationFrameId = requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const elapsedTime = clock.getElapsedTime();
+
+            // 1. Update Optima Positions (Targets)
+            optima.forEach((optimum, i) => {
+                // *** Only apply automatic movement if NOT being dragged ***
+                if (!optimum.isDragged) {
+                    const timeFactor = elapsedTime * config.optimaMoveSpeed;
+                    const angle1 = timeFactor * (15 + i * 7) + i * Math.PI / 3;
+                    const angle2 = timeFactor * (11 - i * 4) + i * Math.PI / 1.5;
+                    const angle3 = timeFactor * (13 + i * 3) + i * Math.PI / 2;
+
+                    // Update the LOGICAL position used by particles
+                    optimum.position.x = Math.sin(angle1) * Math.cos(angle2) * config.optimaMoveRadius;
+                    optimum.position.y = Math.sin(angle2) * Math.cos(angle3) * config.optimaMoveRadius * 0.8;
+                    optimum.position.z = Math.sin(angle3) * Math.cos(angle1) * config.optimaMoveRadius;
+
+                    optimum.position.clampLength(0, config.bounds * 0.49); // Keep slightly inside main bounds
+
+                    // Update the visual marker's position from the logical one
+                    optimum.marker.position.copy(optimum.position);
+                }
+                // If it IS being dragged, its position is updated in onPointerMove
+            });
+
+            // 2. Calculate forces for all particles (uses optima[].position)
+            particles.forEach(particle => {
+                particle.applyBehaviors(particles, optima);
+            });
+
+            // 3. Update physics and BufferGeometry positions
+            const positions = particleGeometry.attributes.position.array;
+            particles.forEach((particle, i) => {
+                particle.update();
+                particle.position.toArray(positions, i * 3);
+            });
+            particleGeometry.attributes.position.needsUpdate = true;
+
+            // 4. Update camera controls (only if enabled)
+            if (controls.enabled) {
+                controls.update();
+            }
+
+            // 5. Render the scene
+            renderer.render(scene, camera);
+        }
+
+        // --- Start the simulation ---
+        init();
+        animate();
+
+    </script>
+</body>
+</html>
